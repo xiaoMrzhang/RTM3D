@@ -264,7 +264,12 @@ class PoseResNet(nn.Module):
                                 nn.init.constant_(m.bias, 0)
             # pretrained_state_dict = torch.load(pretrained)
             url = model_urls['resnet{}'.format(num_layers)]
-            pretrained_state_dict = model_zoo.load_url(url)
+            pretrained_path = os.path.join("../checkpoints/pretrained_model", 
+                            url.split('/')[-1])
+            if not os.path.exists(pretrained_path):
+                pretrained_state_dict = model_zoo.load_url(url)
+            else:
+                pretrained_state_dict = torch.load(pretrained_path)
             print('=> loading pretrained model {}'.format(url))
             self.load_state_dict(pretrained_state_dict, strict=False)
         else:

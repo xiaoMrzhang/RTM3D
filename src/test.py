@@ -24,6 +24,7 @@ import numpy as np
 sys.path.append('../')
 
 import config.kitti_config as cnf
+from data_process import kitti_data_utils
 from data_process.kitti_dataloader import create_test_dataloader
 from models.model_utils import create_model
 from utils.misc import make_folder, time_synchronized
@@ -74,6 +75,7 @@ def parse_test_configs():
                         help='the type of the test output (support image or video)')
     parser.add_argument('--output_video_fn', type=str, default='out_rtm3d', metavar='PATH',
                         help='the video filename if the output format is video')
+    parser.add_argument('--show_3dbox', type=str, default=False, help='show 3D bounding box')
 
     configs = edict(vars(parser.parse_args()))
     configs.pin_memory = True
@@ -159,16 +161,17 @@ if __name__ == '__main__':
             detections = detections.cpu().numpy()
             detections = post_processing_2d(detections, configs.num_classes, configs.down_ratio)
             detections = get_final_pred(detections[0], configs.num_classes, configs.peak_thresh)
+            import pdb;pdb.set_trace()
 
             img = imgs.squeeze().permute(1, 2, 0).numpy()
             img = denormalize_img(img)
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-            # calib = kitti_data_utils.Calibration(img_paths[0].replace(".png", ".txt").replace("image_2", "calib"))
+            calib = kitti_data_utils.Calibration(img_paths[0].replace(".png", ".txt").replace("image_2", "calib"))
+            K = calib.P2
 
             # Draw prediction in the image
-            out_img = draw_predictions(img, detections, cnf.colors, configs.num_classes)
-
+            out_img = draw_predictions(cv2.imread(img_paths[0]), detections, cnf.colors, K, configs.num_classes, configs.show_3dbox)
             print('\tDone testing the {}th sample, time: {:.1f}ms, speed {:.2f}FPS'.format(batch_idx, (t2 - t1) * 1000,
                                                                                            1 / (t2 - t1)))
 
