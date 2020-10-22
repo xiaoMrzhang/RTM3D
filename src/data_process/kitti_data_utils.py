@@ -215,6 +215,17 @@ def project_to_image(pts_3d, P):
     return pts_2d.astype(np.int)
 
 
+def image_to_project(its_2d, depth, K):
+    # _x = its_2d[0] * depth
+    # _y = its_2d[1] * depth
+    # pts_2d = np.array([_x, _y, depth])
+    pts_2d = np.concatenate((its_2d, np.zeros([1], np.int)+1), axis=0)
+    # pts_2d = np.expand_dims(pts_2d, 0).transpose(1, 0)
+    pts_2d = np.dot(pts_2d, depth)
+    pts_3d = np.dot(np.linalg.inv(K), pts_2d)
+
+    return pts_3d
+
 def draw_box_3d_v2(image, qs, color=(255, 0, 255), thickness=2):
     ''' Draw 3d bounding box in image
         qs: (8,3) array of vertices for the 3d box in following order:
@@ -253,6 +264,13 @@ def draw_box_3d(image, corners, color=(0, 0, 255)):
           . 5 -------- 4
           |/         |/
           6 -------- 7
+            4 -------- 7
+           /|         /|
+          5 -------- 6 .
+          | |        | |
+          . 0 -------- 3
+          |/         |/
+          1 -------- 2
 
     '''
 
@@ -260,6 +278,12 @@ def draw_box_3d(image, corners, color=(0, 0, 255)):
                 [1, 2, 6, 5],
                 [2, 3, 7, 6],
                 [3, 0, 4, 7]]
+    # face_idx = [[7, 4, 0, 3],
+    #             [4, 5, 1, 0],
+    #             [5, 6, 2, 1],
+    #             [6, 7, 3, 2]]
+    # for corner in corners:
+    #     image = cv2.circle(image, tuple(corner), 3, (0, 0, 255), -1)
     for ind_f in range(3, -1, -1):
         f = face_idx[ind_f]
         for j in range(4):
@@ -305,19 +329,19 @@ def compute_radius(det_size, min_overlap=0.7):
     b1 = (height + width)
     c1 = width * height * (1 - min_overlap) / (1 + min_overlap)
     sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
-    r1 = (b1 + sq1) / 2
+    r1 = (b1 + sq1) / (2 * a1)
 
     a2 = 4
     b2 = 2 * (height + width)
     c2 = (1 - min_overlap) * width * height
     sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
-    r2 = (b2 + sq2) / 2
+    r2 = (b2 + sq2) / (2 * a2)
 
     a3 = 4 * min_overlap
     b3 = -2 * min_overlap * (height + width)
     c3 = (min_overlap - 1) * width * height
     sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
-    r3 = (b3 + sq3) / 2
+    r3 = (b3 + sq3) / (2 * a3)
 
     return min(r1, r2, r3)
 

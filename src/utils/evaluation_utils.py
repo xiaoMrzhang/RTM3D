@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import cv2
 
 sys.path.append('../')
-from data_process.kitti_data_utils import draw_box_3d
+from data_process.kitti_data_utils import draw_box_3d, image_to_project, compute_box_3d, project_to_image
 
 
 def _nms(heat, kernel=3):
@@ -53,11 +53,11 @@ def _topk(scores, K=40):
     topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
 
     topk_inds = topk_inds % (height * width)
-    topk_ys = (topk_inds / width).int().float()
+    topk_ys = torch.true_divide(topk_inds, width).int().float()
     topk_xs = (topk_inds % width).int().float()
 
     topk_score, topk_ind = torch.topk(topk_scores.view(batch, -1), K)
-    topk_clses = (topk_ind / K).int()
+    topk_clses = torch.true_divide(topk_ind, K).int()
     topk_inds = _gather_feat(topk_inds.view(batch, -1, 1), topk_ind).view(batch, K)
     topk_ys = _gather_feat(topk_ys.view(batch, -1, 1), topk_ind).view(batch, K)
     topk_xs = _gather_feat(topk_xs.view(batch, -1, 1), topk_ind).view(batch, K)
@@ -71,7 +71,7 @@ def _topk_channel(scores, K=40):
     topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
 
     topk_inds = topk_inds % (height * width)
-    topk_ys = (topk_inds / width).int().float()
+    topk_ys = torch.true_divide(topk_inds, width).int().float()
     topk_xs = (topk_inds % width).int().float()
 
     return topk_scores, topk_inds, topk_ys, topk_xs
@@ -212,7 +212,7 @@ def get_final_pred(detections, num_classes=3, peak_thresh=0.2):
     return detections
 
 
-def draw_predictions(img, detections, colors, num_classes=3, show_3dbox=False):
+def draw_predictions(img, detections, colors, K, num_classes=3, show_3dbox=False):
     for j in range(num_classes):
         if len(detections[j] > 0):
             for det in detections[j]:
@@ -221,9 +221,20 @@ def draw_predictions(img, detections, colors, num_classes=3, show_3dbox=False):
                 _x, _y, _wh, _bbox, _ver_coor = int(det[1]), int(det[2]), det[3:5], det[5:9], det[9:25]
                 _rot, _depth, _dim = det[25], det[26], det[27:30]
                 _bbox = np.array(_bbox, dtype=np.int)
+                pad_y = (384 - img.shape[0]) // 2
+                pad_x = (1280 - img.shape[1]) // 2
+                _bbox = [_bbox[0]-pad_x, _bbox[1]-pad_y, _bbox[2]-pad_x, _bbox[3]-pad_y]
+                _loc = image_to_project([_x-pad_x, _bbox[-1]], _depth, K[:3, :3])
+                # cent_3d = np.array(np.dot(K[:3,:3], _loc), np.int)
+                # img = cv2.circle(img, tuple(cent_3d[:2]), 3, (0, 255, 0), -1)
+                # _loc = np.array([1.84, 1.47, 8.41])
+                # _dim = np.array([1.89, 0.48, 1.20])
+                bbox_3d = compute_box_3d(_dim, _loc, _rot)
+                bbox_3d = project_to_image(bbox_3d, K)
+                # import pdb;pdb.set_trace()
                 img = cv2.rectangle(img, (_bbox[0], _bbox[1]), (_bbox[2], _bbox[3]), colors[-j - 1], 2)
                 if show_3dbox:
-                    _ver_coor = np.array(_ver_coor, dtype=np.int).reshape(-1, 2)
+                    _ver_coor = np.array(bbox_3d, dtype=np.int).reshape(-1, 2)
                     img = draw_box_3d(img, _ver_coor, color=colors[j])
                 # print('_depth: {:.2f}n, _dim: {}, _rot: {:.2f} radian'.format(_depth, _dim, _rot))
 
